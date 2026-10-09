@@ -18,6 +18,8 @@ model User {
   updatedAt    DateTime      @updatedAt
   reservations Reservation[]
   reviews      Review[]
+
+  @@index([role])
 }
 
 model Accommodation {
@@ -32,6 +34,8 @@ model Accommodation {
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   reservationItems ReservationItem[]
+
+  @@index([status, type])
 }
 
 model Amenity {
@@ -45,6 +49,8 @@ model Amenity {
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   reservationItems ReservationItem[]
+
+  @@index([category])
 }
 
 model Reservation {
@@ -62,6 +68,10 @@ model Reservation {
   updatedAt    DateTime          @updatedAt
   items        ReservationItem[]
   payment      Payment?
+
+  @@index([status, checkInDate, checkOutDate])
+  @@index([userId])
+  @@index([createdAt])
 }
 
 model ReservationItem {
@@ -74,6 +84,10 @@ model ReservationItem {
   amenity         Amenity?       @relation(fields: [amenityId], references: [id], onDelete: SetNull)
   quantity        Int            @default(1)
   subtotal        Float
+
+  @@index([reservationId])
+  @@index([accommodationId])
+  @@index([amenityId])
 }
 
 model Payment {
@@ -86,6 +100,8 @@ model Payment {
   amount          Float
   paidAt          DateTime?
   createdAt       DateTime    @default(now())
+
+  @@index([status])
 }
 
 model Review {
@@ -95,4 +111,6 @@ model Review {
   rating    Int
   comment   String
   createdAt DateTime @default(now())
+
+  @@index([userId])
 }
