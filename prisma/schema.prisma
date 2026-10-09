@@ -1,0 +1,98 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  name         String
+  password     String
+  role         String        @default("GUEST") // "GUEST" | "ADMIN"
+  phone        String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  reservations Reservation[]
+  reviews      Review[]
+}
+
+model Accommodation {
+  id               String            @id @default(cuid())
+  name             String
+  type             String            // "ROOM" | "COTTAGE" | "VILLA"
+  pricePerNight    Float
+  capacity         Int
+  description      String
+  imageUrl         String
+  status           String            @default("AVAILABLE") // "AVAILABLE" | "MAINTENANCE"
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  reservationItems ReservationItem[]
+}
+
+model Amenity {
+  id               String            @id @default(cuid())
+  name             String
+  category         String            // "EVENT_HALL" | "POOL_PASS" | "FOOD_PACKAGE" | "ACTIVITY"
+  price            Float
+  unit             String            // "PER_PERSON" | "PER_HOUR" | "PER_DAY"
+  description      String
+  imageUrl         String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  reservationItems ReservationItem[]
+}
+
+model Reservation {
+  id           String            @id @default(cuid())
+  bookingCode  String            @unique // e.g. RES-2026-8941
+  userId       String
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  checkInDate  DateTime
+  checkOutDate DateTime
+  guestCount   Int
+  totalAmount  Float
+  status       String            @default("PENDING") // "PENDING" | "CONFIRMED" | "CANCELLED" | "COMPLETED"
+  notes        String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  items        ReservationItem[]
+  payment      Payment?
+}
+
+model ReservationItem {
+  id              String         @id @default(cuid())
+  reservationId   String
+  reservation     Reservation    @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  accommodationId String?
+  accommodation   Accommodation? @relation(fields: [accommodationId], references: [id], onDelete: SetNull)
+  amenityId       String?
+  amenity         Amenity?       @relation(fields: [amenityId], references: [id], onDelete: SetNull)
+  quantity        Int            @default(1)
+  subtotal        Float
+}
+
+model Payment {
+  id              String      @id @default(cuid())
+  reservationId   String      @unique
+  reservation     Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  method          String      // "GCASH" | "CREDIT_CARD" | "CASH_ON_ARRIVAL"
+  status          String      @default("PENDING") // "PAID" | "PENDING" | "FAILED" | "REFUNDED"
+  referenceNumber String?
+  amount          Float
+  paidAt          DateTime?
+  createdAt       DateTime    @default(now())
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rating    Int
+  comment   String
+  createdAt DateTime @default(now())
+}
