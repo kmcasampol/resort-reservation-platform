@@ -4,16 +4,18 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log("Seeding database...");
+  // Check if admin already exists — if so, the database is already seeded,
+  // so we skip clearing records to protect production data across redeployments!
+  const existingAdmin = await prisma.user.findFirst({
+    where: { role: "ADMIN" },
+  });
 
-  // Clear existing records
-  await prisma.payment.deleteMany();
-  await prisma.reservationItem.deleteMany();
-  await prisma.reservation.deleteMany();
-  await prisma.review.deleteMany();
-  await prisma.accommodation.deleteMany();
-  await prisma.amenity.deleteMany();
-  await prisma.user.deleteMany();
+  if (existingAdmin) {
+    console.log("Database already initialized with existing admin. Skipping destructive seed to preserve data.");
+    return;
+  }
+
+  console.log("Empty database detected. Seeding initial resort data...");
 
   // 1. Create Users
   const adminPassword = await bcrypt.hash("admin123", 10);
@@ -39,7 +41,17 @@ async function main() {
     },
   });
 
-  console.log(`Created admin: ${admin.email} and guest: ${guest.email}`);
+  const extraGuest = await prisma.user.create({
+    data: {
+      email: "maria.clara@example.ph",
+      name: "Maria Clara",
+      password: guestPassword,
+      role: "GUEST",
+      phone: "+63 917 555 4321",
+    },
+  });
+
+  console.log(`Created admin: ${admin.email} and guests: ${guest.email}, ${extraGuest.email}`);
 
   // 2. Create Accommodations
   const villa = await prisma.accommodation.create({
@@ -128,123 +140,78 @@ async function main() {
 
   console.log("Amenities seeded.");
 
-  // 4. Create a Sample Reservation
-  // Reservation dates are calendar dates: keep them at local midnight so the
-  // availability overlap test compares days rather than wall-clock times.
-  const midnight = (offsetDays: number) => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
+  // 4. Create Sample Reservations
+  const today = new Date();
+  const shift = (offsetDays: number) => {
+    const d = new Date(today);
     d.setDate(d.getDate() + offsetDays);
+    d.setHours(14, 0, 0, 0);
     return d;
-  };
-
-  const checkIn = midnight(5);
-  const checkOut = midnight(7);
-
-  const reservation = await prisma.reservation.create({
-    data: {
-      bookingCode: "RES-2026-8941",
-      userId: guest.id,
-      checkInDate: checkIn,
-      checkOutDate: checkOut,
-      guestCount: 2,
-      totalAmount: 11100, // (4800 * 2 nights) + (750 * 2 people buffet)
-      status: "CONFIRMED",
-      notes: "Anniversary celebration; requested high floor.",
-      items: {
-        create: [
-          {
-            accommodationId: suite.id,
-            quantity: 2, // 2 nights
-            subtotal: 9600,
-          },
-          {
-            amenityId: foodPackage.id,
-            quantity: 2,
-            subtotal: 1500,
-          },
-        ],
-      },
-      payment: {
-        create: {
-          method: "GCASH",
-          status: "PAID",
-          referenceNumber: "GCASH-992817263",
-          amount: 11100,
-          paidAt: new Date(),
-        },
-      },
-    },
-  });
-
-  console.log(`Sample reservation created: ${reservation.bookingCode}`);
-
-  // 5. Additional sample stays so the dashboard KPIs, occupancy band, and
-  //    calendar have meaningful data on a fresh seed.
-  const extraGuest = await prisma.user.create({
-    data: {
-      email: "maria@example.com",
-      name: "Maria Santos",
-      password: guestPassword,
-      role: "GUEST",
-      phone: "+63 917 111 2222",
-    },
-  });
-
-  const shift = (days: number) => {
-    const date = new Date();
-    date.setHours(0, 0, 0, 0);
-    date.setDate(date.getDate() + days);
-    return date;
   };
 
   const sampleStays = [
     {
-      bookingCode: "RES-2026-4183",
+      bookingCode: "RES-2026-8941",
+      userId: guest.id,
+      checkInDate: shift(5),
+      checkOutDate: shift(7),
+      guestCount: 2,
+      status: "CONFIRMED",
+      notes: "Anniversary celebration; requested high floor.",
+      items: [
+        { accommodationId: suite.id, quantity: 2, subtotal: 4800 * 2 },
+        { amenityId: foodPackage.id, quantity: 2, subtotal: 750 * 2 },
+      ],
+      payment: {
+        method: "GCASH",
+        status: "PAID",
+        amount: 4800 * 2 + 750 * 2,
+        paidAt: new Date(),
+        referenceNumber: "GCASH-992817263",
+      },
+    },
+    {
+      bookingCode: "RES-2026-1102",
       userId: extraGuest.id,
       checkInDate: shift(1),
       checkOutDate: shift(4),
       guestCount: 6,
-      status: "PENDING",
-      notes: "Corporate team outing — awaiting down payment.",
+      status: "CONFIRMED",
+      notes: "Family reunion. Please prepare extra beach towels.",
       items: [
-        { accommodationId: villa.id, quantity: 3, subtotal: 8500 * 3 },
+        { accommodationId: familyRoom.id, quantity: 3, subtotal: 5200 * 3 },
         { amenityId: poolPass.id, quantity: 6, subtotal: 350 * 6 },
       ],
       payment: {
+        method: "CREDIT_CARD",
+        status: "PAID",
+        amount: 5200 * 3 + 350 * 6,
+        paidAt: new Date(),
+        referenceNumber: "CARD-48821903",
+      },
+    },
+    {
+      bookingCode: "RES-2026-4481",
+      userId: guest.id,
+      checkInDate: shift(10),
+      checkOutDate: shift(12),
+      guestCount: 4,
+      status: "PENDING",
+      notes: "Paying cash upon arrival at resort reception.",
+      items: [{ accommodationId: cottage.id, quantity: 2, subtotal: 3500 * 2 }],
+      payment: {
         method: "CASH_ON_ARRIVAL",
         status: "PENDING",
-        amount: 8500 * 3 + 350 * 6,
+        amount: 3500 * 2,
         paidAt: null,
         referenceNumber: null,
       },
     },
     {
-      bookingCode: "RES-2026-7305",
-      userId: guest.id,
-      checkInDate: shift(12),
-      checkOutDate: shift(16),
-      guestCount: 4,
-      status: "CONFIRMED",
-      notes: "Kids' birthday party; needs the function hall for one day.",
-      items: [
-        { accommodationId: familyRoom.id, quantity: 4, subtotal: 5200 * 4 },
-        { amenityId: eventHall.id, quantity: 1, subtotal: 15000 },
-        { amenityId: foodPackage.id, quantity: 4, subtotal: 750 * 4 },
-      ],
-      payment: {
-        method: "CREDIT_CARD",
-        status: "PAID",
-        amount: 5200 * 4 + 15000 + 750 * 4,
-        paidAt: new Date(),
-        referenceNumber: "CREDIT_CARD-55210984",
-      },
-    },
-    {
-      bookingCode: "RES-2026-2264",
+      bookingCode: "RES-2026-7230",
       userId: extraGuest.id,
-      checkInDate: shift(-14),
-      checkOutDate: shift(-11),
+      checkInDate: shift(-10),
+      checkOutDate: shift(-7),
       guestCount: 3,
       status: "COMPLETED",
       notes: null,
@@ -253,26 +220,8 @@ async function main() {
         method: "GCASH",
         status: "PAID",
         amount: 3500 * 3,
-        paidAt: shift(-14),
+        paidAt: shift(-10),
         referenceNumber: "GCASH-30491772",
-      },
-    },
-    {
-      bookingCode: "RES-2026-9052",
-      userId: extraGuest.id,
-      checkInDate: shift(20),
-      checkOutDate: shift(23),
-      guestCount: 4,
-      status: "CANCELLED",
-      notes: "Guest rebooked for a later date.",
-      items: [{ accommodationId: villa.id, quantity: 3, subtotal: 8500 * 3 }],
-      payment: {
-        method: "GCASH",
-        // Cancelled stays are refunded, so they never count as revenue.
-        status: "REFUNDED",
-        amount: 8500 * 3,
-        paidAt: null,
-        referenceNumber: "GCASH-77182045",
       },
     },
   ];
@@ -294,7 +243,7 @@ async function main() {
     });
   }
 
-  console.log(`Seeded ${sampleStays.length} additional sample stays.`);
+  console.log(`Seeded ${sampleStays.length} initial sample stays.`);
   console.log("Database seeded successfully!");
 }
 
