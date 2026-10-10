@@ -5,14 +5,17 @@ import { COOKIE_NAME, SESSION_TTL_SECONDS, signSessionToken, verifySessionToken 
 
 export { COOKIE_NAME, verifySessionToken } from "@/lib/session";
 
-export type AdminSession = {
+export type UserSession = {
   id: string;
   name: string;
   email: string;
   role: string;
+  phone?: string | null;
 };
 
-export async function setAdminSession(userId: string) {
+export type AdminSession = UserSession;
+
+export async function setUserSession(userId: string) {
   const token = await signSessionToken(userId);
   const cookieStore = await cookies();
   cookieStore.set(COOKIE_NAME, token, {
@@ -24,19 +27,19 @@ export async function setAdminSession(userId: string) {
   });
 }
 
-export async function clearAdminSession() {
+export const setAdminSession = setUserSession;
+
+export async function clearUserSession() {
   const cookieStore = await cookies();
   cookieStore.delete(COOKIE_NAME);
 }
 
+export const clearAdminSession = clearUserSession;
+
 /**
- * Resolves the current admin session.
- *
- * The token proves *who* the caller claims to be; the database lookup proves
- * the account still exists and still holds the ADMIN role, so revoking a role
- * takes effect immediately.
+ * Resolves the currently authenticated session for any user (guest or admin).
  */
-export async function getAdminSession(): Promise<AdminSession | null> {
+export async function getCurrentUser(): Promise<UserSession | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(COOKIE_NAME)?.value;
   if (!token) return null;
@@ -47,17 +50,25 @@ export async function getAdminSession(): Promise<AdminSession | null> {
   try {
     const user = await prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { id: true, name: true, email: true, role: true },
+      select: { id: true, name: true, email: true, role: true, phone: true },
     });
 
-    if (user && user.role === "ADMIN") {
-      return user;
-    }
-    return null;
+    return user;
   } catch (error) {
     console.error("Session lookup error:", error);
     return null;
   }
+}
+
+/**
+ * Resolves the current admin session.
+ */
+export async function getAdminSession(): Promise<AdminSession | null> {
+  const user = await getCurrentUser();
+  if (user && user.role === "ADMIN") {
+    return user;
+  }
+  return null;
 }
 
 /** Page-level guard: bounce unauthenticated visitors to the login screen. */
@@ -70,8 +81,7 @@ export async function requireAdmin(): Promise<AdminSession> {
 }
 
 /**
- * Server-Action-level guard. `redirect()` is not appropriate inside an action
- * invoked from an event handler, so callers get a normal result object instead.
+ * Server-Action-level guard for Admin operations.
  */
 export async function assertAdmin(): Promise<
   { ok: true; session: AdminSession } | { ok: false; error: string }

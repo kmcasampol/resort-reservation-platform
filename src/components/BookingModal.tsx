@@ -20,12 +20,15 @@ import {
 import { differenceInCalendarDays, parseISO, format } from "date-fns";
 import Link from "next/link";
 
+import type { UserSession } from "@/lib/auth";
+
 interface BookingModalProps {
   accommodation: AccommodationData;
   amenities: AmenityData[];
   initialCheckIn: string;
   initialCheckOut: string;
   initialGuests: number;
+  currentUser?: UserSession | null;
   onClose: () => void;
 }
 
@@ -35,6 +38,7 @@ export default function BookingModal({
   initialCheckIn,
   initialCheckOut,
   initialGuests,
+  currentUser,
   onClose,
 }: BookingModalProps) {
   const [isPending, startTransition] = useTransition();
@@ -46,10 +50,11 @@ export default function BookingModal({
     Math.min(initialGuests || 2, accommodation.capacity)
   );
 
-  const [guestName, setGuestName] = useState("");
-  const [guestEmail, setGuestEmail] = useState("");
-  const [guestPhone, setGuestPhone] = useState("");
+  const [guestName, setGuestName] = useState(currentUser?.name ?? "");
+  const [guestEmail, setGuestEmail] = useState(currentUser?.email ?? "");
+  const [guestPhone, setGuestPhone] = useState(currentUser?.phone ?? "");
   const [notes, setNotes] = useState("");
+
 
   // Amenities selected: Map of amenityId -> quantity
   const [selectedAmenities, setSelectedAmenities] = useState<Record<string, number>>({});
